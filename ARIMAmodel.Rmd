@@ -1,0 +1,142 @@
+---
+title: "modeltest"
+output: html_document
+date: "2024-06-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+install.packages("forecast")
+install.packages("tseries")
+install.packages("tidyverse")
+#import libraries
+require(forecast)
+require(tseries)
+require(tidyverse)
+```
+```{r}
+#set working directory
+setwd("C:/Users/Salma/Documents/rTest")
+```
+
+```{r}
+#import data
+houseTest <- read.csv("SPCS20RPSNSA.csv")
+head(houseTest)
+```
+
+```{r}
+#change name of data columns to units to convert into timeseries format to pass into the arima model
+#[2] second column to simplify the name
+names(houseTest)[2] <- "Units"
+
+#create a units object to transform into time series
+CSunits <- houseTest$Units
+
+#create time series object thatstarts in jan 2000 with a monthly frequency
+thouseTest <- ts(CSunits, start = c(2000, 1), frequency = 12)
+
+#check data transformation
+thouseTest
+```
+
+```{r}
+#Automatically create arima model
+fit <- auto.arima(thouseTest)
+fit 
+#the ar1 and ar2 are the auto agressive (linear regression) part in the arima model
+# the ma is the moving average 
+```
+
+
+```{r}
+#check accuracy
+accuracy(fit)
+```
+```{r}
+plot(forecast(fit, 12), xlab = "Date", ylab = "Units", main = "Arima forecast for Predective housing prices")
+
+#the blue line is the prediction and dark grey line is 80% confidence and the light grey lines around it is 95% percent confidence
+```
+```{r}
+#get table of forecasted values
+pred_values <- forecast(fit, 12)
+pred_values
+```
+```{r}
+#Check assumptions of normalcy and Aurocorrelation
+qqnorm(fit$residuals)
+qqline(fit$residuals)
+Box.test(fit$residuals, type = "Ljung-Box")
+
+#Has high p-value (linear regression {most dots are on the straight line}) so autocorrelation not significantly different than 0
+# there are a few possible outliers (floating data) but most of the data is distributed well
+```
+
+```{r}
+#transform time series to log scale (squish it down)
+ltHouse <- log(thouseTest)
+head(ltHouse)
+```
+```{r}
+#log scale for seasonal decomposition
+fit2 <- stl(ltHouse, s.window = "period")
+
+plot(fit2, main = "Seasonal Decomposition of log (House Units)")
+```
+
+```{r}
+#create a season plot
+
+ggseasonplot(thouseTest, year.labels = TRUE , col = rainbow(20))
+```
+```{r}
+#ARIMA model for the log
+fit3 <- auto.arima(ltHouse)
+fit3
+```
+
+```{r}
+#check accuracy
+
+fitAccuracy <- data.frame(accuracy(fit))
+fitAccuracy2 <- data.frame(accuracy(fit3))
+#to see the comparison between the first accuracy and the final fit
+fitAccuracyFinal <- rbind(fitAccuracy, fitAccuracy2)
+fitAccuracyFinal
+
+# the seconf has a less error rate because of the log transform from the first fit
+```
+```{r}
+#create a plot for the forecast of the log transform
+
+plot(forecast(fit3, 12), xlab = "Date", ylab = "Units", main = "ARIMA forecast for Log transform")
+
+#the units are just smaller
+```
+
+```{r}
+#Get table of forecasted values 
+
+#original data
+pred_values <- data.frame(forecast(fit,12))
+
+#log transformed data
+pred_values2 <- data.frame(forecast(fit3, 12))
+pred_values2[,1:5] <- exp(pred_values2[,1:5]) # to extract data from log function
+
+#merge forecast predictions
+
+mergeDF <- data.frame(Data = rownames(pred_values), 
+                      original_df = pred_values$Point.Forecast, 
+                      LogTransformed_df = pred_values2$Point.Forecast, 
+                      Difference = round(pred_values$Point.Forecast - pred_values2$Point.Forecast, 2))
+mergeDF
+```
+
+
+
